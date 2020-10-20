@@ -39,8 +39,7 @@ logic [15:0] BIST_expected_data;
 
 logic [1:0]read_increment;
 logic write_increment;
-logic comparison;
-logic [1:0]limit;
+
 logic mode;
 logic [15:0] data;
 // write the 16 least significant bits of the address bus in each memory location
@@ -72,9 +71,7 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 		BIST_start_buf <= 1'b0;
 		read_increment <= 1'b0;
 		write_increment <= 1'b0;
-		comparison <= -16'd2;
 		mode <= 1'b0;
-		limit <= 2'b0;
 	end else begin
 		BIST_start_buf <= BIST_start;
 		
@@ -141,7 +138,7 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 					BIST_state <= S_IDLE;
 					BIST_finish <= 1'b1;	
 					read_increment <= 1'b0;
-					comparison <= -16'd2;	
+						
 					mode <= 1'b0;
 				end else
 					BIST_state <= S_DELAY_3;
@@ -169,8 +166,7 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 				BIST_state <= S_IDLE;
 				BIST_finish <= 1'b1;	
 				read_increment <= 1'b0;
-				write_increment <= 1'b1;
-				comparison <= -16'd2;	
+				write_increment <= 1'b0;	
 				mode <= 1'b0;
 				
 			end else begin
@@ -179,7 +175,6 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 				read_increment <= 2'd3;
 				write_increment <= 1'b1;
 				BIST_we_n <= 1'b0;
-				comparison <= 16'd2;
 				mode <= 1'b1;
 				
 			end

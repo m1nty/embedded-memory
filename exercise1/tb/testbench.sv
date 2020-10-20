@@ -15,26 +15,16 @@ module TB;
 	logic [8:0] led_green;
 
 	initial begin
-
-		// set up default values and inputs
-        $timeformat(-6, 2, "us", 10);
+                $timeformat(-6, 2, "us", 10);		
 		clock_50 = 1'b0;
 		switch[17:0] = 18'd0;
-
-		// apply the asynchronous reset
 		repeat (2) @(negedge clock_50);
 		$display("\n*** Asserting the asynchronous reset ***");
 		switch[17] = 1'b1;
 		repeat (3) @(negedge clock_50);
-		switch[17] = 1'b0;
+		switch[17] = 1'b0;		
 		$display("*** Deasserting the asynchronous reset ***\n");
-
-		// assert switch[0] to start computing
-		switch[0] = 1'b1;
-		repeat (3) @(posedge clock_50);
-		switch[0] = 1'b0;
-
-		// run simulation for another 21 us
+		// run simulation for 21 us
 		# 21000;
 		$stop;
 	end

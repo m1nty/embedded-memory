@@ -37,11 +37,6 @@ enum logic [2:0] {
 logic BIST_start_buf;
 logic [15:0] BIST_expected_data;
 
-logic [1:0]read_increment;
-logic write_increment;
-
-logic mode;
-logic [15:0] data;
 // write the 16 least significant bits of the address bus in each memory location
 // 
 // NOTE: this particular BACKGROUND pattern is specific to this BIST implementation
@@ -52,15 +47,13 @@ assign BIST_write_data[15:0] = BIST_address[15:0];
 // decrementing the 16 least significant bits of the address 
 //
 // NOTE: the expected data must change if the memory is traversed in a different way
-always_comb begin
-	if(mode == 1'b0)
-		data = BIST_address[15:0] - 16'd2;
-	else
-		data = BIST_address[15:0] + 16'd2;
-end
+assign BIST_expected_data[15:0] = BIST_address[15:0] - 16'd1;
 
-assign BIST_expected_data[15:0] = data;
-
+// this specific BIST engine for this reference implementation works as follows
+// write location 0 -> read location 0 -> 
+// write location 1 -> read location 1 + compare location 0 ->
+// write location 2 -> read location 2 + compare location 1 ->
+// ... go through the entire address range
 always_ff @ (posedge Clock or negedge Resetn) begin
 	if (Resetn == 1'b0) begin
 		BIST_state <= S_IDLE;
@@ -69,9 +62,6 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 		BIST_address <= 18'd0;
 		BIST_we_n <= 1'b1;		
 		BIST_start_buf <= 1'b0;
-		read_increment <= 1'b0;
-		write_increment <= 1'b0;
-		mode <= 1'b0;
 	end else begin
 		BIST_start_buf <= BIST_start;
 		
@@ -83,7 +73,7 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 				BIST_we_n <= 1'b0; // initiate first WRITE
 				BIST_mismatch <= 1'b0;
 				BIST_finish <= 1'b0;
-				BIST_state <= S_WRITE_CYCLE;
+				BIST_state <= S_DELAY_1;
 			end else begin
 				BIST_address <= 18'd0;
 				BIST_we_n <= 1'b1;
@@ -92,92 +82,44 @@ always_ff @ (posedge Clock or negedge Resetn) begin
 		end
 		// a couple of delay states to initiate the first WRITE and first READ
 		S_DELAY_1: begin
-			if(mode == 1'b0)
-				BIST_address <= BIST_address + 1'b1;
-			else
-				BIST_address <= BIST_address - 1'b1;
+			BIST_we_n <= 1'b1;  // initiate first READ (NOTE: registers updated NEXT clock cycle)
 			BIST_state <= S_DELAY_2;
 		end
 		S_DELAY_2: begin
-			if(mode == 1'b0)
-				BIST_address <= BIST_address + 1'b1;
-			else
-				BIST_address <= BIST_address - 1'b1;
-				
-			BIST_state <= S_READ_CYCLE;
+			BIST_we_n <= 1'b0; // initiate second WRITE
+			BIST_address <= BIST_address + 18'd1;
+			BIST_state <= S_WRITE_CYCLE;
 		end
 		S_WRITE_CYCLE: begin
-			if(mode == 1'b0)
-				BIST_address <= BIST_address + 1'b1;
-			else 
-				BIST_address <= BIST_address - 1'b1;
-			if(BIST_address == 18'h1FFFF + write_increment) begin
-				BIST_we_n <= 1'b1;
-				BIST_state <= S_DELAY_1;
-				if(mode == 1'b0) begin
-					BIST_address <= 18'd0;
-				end else begin
-					BIST_address <= 18'h3FFFF;
-				end
-			end
+			// initiate a new READ
+			BIST_we_n <= 1'b1;
+			BIST_state <= S_READ_CYCLE;
 		end
 		S_READ_CYCLE: begin
 			// complete the READ initiated two clock cycles earlier and perform comparison
-			
 			if (BIST_read_data != BIST_expected_data) 
 				BIST_mismatch <= 1'b1;
-			
-			
-			if(mode == 1'b0)
-				BIST_address <= BIST_address + 1'b1;
-			else 
-				BIST_address <= BIST_address - 1'b1;
-			if(BIST_address == 18'h1FFFF + read_increment) begin
+			BIST_address <= BIST_address + 18'd1;
+			if (BIST_address < 18'h3FFFF) begin
+				// increment address and continue by initiating a new WRITE 
+				BIST_we_n <= 1'b0;
+				BIST_state <= S_WRITE_CYCLE;
+			end else begin
 				// delay for checking the last address
-				if(mode == 1'b1) begin
-					BIST_state <= S_IDLE;
-					BIST_finish <= 1'b1;	
-					read_increment <= 1'b0;
-						
-					mode <= 1'b0;
-				end else
-					BIST_state <= S_DELAY_3;
+				BIST_state <= S_DELAY_3;
 			end
 		end
 		S_DELAY_3: begin
-			//comparison must be done
-			if (BIST_read_data != BIST_expected_data) 
-				BIST_mismatch <= 1'b1;
-			if(mode == 1'b0)
-				BIST_address <= BIST_address + 1'b1;
-			else 
-				BIST_address <= BIST_address - 1'b1;
 			BIST_state <= S_DELAY_4;
 		end
 		S_DELAY_4: begin
 			// check for data mismatch
-			//comparison must be done
-			
 			if (BIST_read_data != BIST_expected_data) 
 				BIST_mismatch <= 1'b1;
 			
 			// finish the whole SRAM
-			if(mode == 1'b1) begin
-				BIST_state <= S_IDLE;
-				BIST_finish <= 1'b1;	
-				read_increment <= 1'b0;
-				write_increment <= 1'b0;	
-				mode <= 1'b0;
-				
-			end else begin
-				BIST_state <= S_WRITE_CYCLE;
-				BIST_address <= 18'h3FFFF;
-				read_increment <= 2'd3;
-				write_increment <= 1'b1;
-				BIST_we_n <= 1'b0;
-				mode <= 1'b1;
-				
-			end
+			BIST_state <= S_IDLE;
+			BIST_finish <= 1'b1;	
 		end
 		default: BIST_state <= S_IDLE;
 		endcase
